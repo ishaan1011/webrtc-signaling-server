@@ -4,6 +4,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const axios = require('axios');
+const cors = require('cors');
 const http = require('http');
 const socketio = require('socket.io');
 
