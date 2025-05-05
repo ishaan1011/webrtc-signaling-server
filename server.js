@@ -13,7 +13,7 @@ const app = express();
 app.get('/healthz', (req, res) => res.send('OK'));
 
 // Serve static client files from public/
-app.use(express.static(path.join(__dirname, 'public')));
+// app.use(express.static(path.join(__dirname, 'public')));    // removed: front-end now on Vercel
 
 // --- ICE SERVERS CACHING (via Xirsys) ---
 let cachedIceServers = [];
@@ -73,7 +73,7 @@ const server = http.createServer(app);
 // Socket.io with CORS set by env var (e.g. your Vercel URL)
 const io = socketio(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: process.env.CORS_ORIGIN,
     methods: ['GET', 'POST']
   }
 });
