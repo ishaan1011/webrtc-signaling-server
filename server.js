@@ -9,6 +9,13 @@ const socketio = require('socket.io');
 
 const app = express();
 
+// ─── Enable CORS for your front-end origin ──────────────────────────────────
+app.use(cors({
+  origin: process.env.CORS_ORIGIN,   // your Vercel URL
+  methods: ['GET', 'POST']
+}));
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Health check for Render
 app.get('/healthz', (req, res) => res.send('OK'));
 
