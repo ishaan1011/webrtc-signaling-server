@@ -155,6 +155,11 @@ io.on('connection', socket => {
       }
     }
   });
+
+  socket.on('hangup', () => {
+    socket.broadcast.emit('hangup');
+  });
+
 });
 
 // Listen on the port Render (or local) specifies
