@@ -87,40 +87,68 @@ const io = socketio(server, {
 });
 
 // In-memory signaling state
-const offers = [];
+// Organize offers by room
+const rooms = {};
 const connectedSockets = [];
 
 // Socket.io logic
 io.on('connection', socket => {
   const userName = socket.handshake.auth.userName;
   const password = socket.handshake.auth.password;
+  const roomId = socket.handshake.auth.roomId || 'default';
 
   if (password !== 'x') {
     return socket.disconnect(true);
   }
+  
+  // Initialize room if it doesn't exist
+  if (!rooms[roomId]) {
+    rooms[roomId] = {
+      offers: [],
+      participants: []
+    };
+  }
 
-  connectedSockets.push({ socketId: socket.id, userName });
+  // Add user to room participants
+  rooms[roomId].participants.push(userName);
+  
+  // Track socket connection with room info
+  connectedSockets.push({ socketId: socket.id, userName, roomId });
+  
+  // Join socket.io room
+  socket.join(roomId);
+  
+  // Broadcast updated participant list to everyone in the room
+  io.to(roomId).emit('roomParticipants', rooms[roomId].participants);
 
-  // Send any existing offers to newcomers
-  if (offers.length) {
-    socket.emit('availableOffers', offers);
+  // Send any existing offers in this room to newcomers
+  if (rooms[roomId].offers.length) {
+    socket.emit('availableOffers', rooms[roomId].offers);
   }
 
   socket.on('newOffer', newOffer => {
-    offers.push({
+    const offerObj = {
       offererUserName: userName,
       offer: newOffer,
       offerIceCandidates: [],
       answererUserName: null,
       answer: null,
-      answererIceCandidates: []
-    });
-    socket.broadcast.emit('newOfferAwaiting', offers.slice(-1));
+      answererIceCandidates: [],
+      roomId: roomId
+    };
+    rooms[roomId].offers.push(offerObj);
+    
+    // Only broadcast to others in the same room
+    socket.to(roomId).emit('newOfferAwaiting', [offerObj]);
   });
 
   socket.on('newAnswer', (offerObj, ack) => {
-    const dest = connectedSockets.find(s => s.userName === offerObj.offererUserName);
-    const offerToUpdate = offers.find(o => o.offererUserName === offerObj.offererUserName);
+    const roomOfferObj = rooms[roomId];
+    if (!roomOfferObj) return;
+    
+    const dest = connectedSockets.find(s => s.userName === offerObj.offererUserName && s.roomId === roomId);
+    const offerToUpdate = roomOfferObj.offers.find(o => o.offererUserName === offerObj.offererUserName);
+    
     if (!dest || !offerToUpdate) return;
 
     // Send back any ICE candidates collected so far
@@ -134,22 +162,25 @@ io.on('connection', socket => {
 
   socket.on('sendIceCandidateToSignalingServer', iceObj => {
     const { didIOffer, iceUserName, iceCandidate } = iceObj;
+    const roomOffers = rooms[roomId]?.offers;
+    if (!roomOffers) return;
+    
     if (didIOffer) {
-      const offerRec = offers.find(o => o.offererUserName === iceUserName);
+      const offerRec = roomOffers.find(o => o.offererUserName === iceUserName);
       if (!offerRec) return;
       offerRec.offerIceCandidates.push(iceCandidate);
       // Forward to answerer if answered
       if (offerRec.answererUserName) {
-        const ansDest = connectedSockets.find(s => s.userName === offerRec.answererUserName);
+        const ansDest = connectedSockets.find(s => s.userName === offerRec.answererUserName && s.roomId === roomId);
         if (ansDest) {
           socket.to(ansDest.socketId).emit('receivedIceCandidateFromServer', iceCandidate);
         }
       }
     } else {
       // ICE from answerer → offerer
-      const offerRec = offers.find(o => o.answererUserName === iceUserName);
+      const offerRec = roomOffers.find(o => o.answererUserName === iceUserName);
       if (!offerRec) return;
-      const offDest = connectedSockets.find(s => s.userName === offerRec.offererUserName);
+      const offDest = connectedSockets.find(s => s.userName === offerRec.offererUserName && s.roomId === roomId);
       if (offDest) {
         socket.to(offDest.socketId).emit('receivedIceCandidateFromServer', iceCandidate);
       }
@@ -157,18 +188,84 @@ io.on('connection', socket => {
   });
 
   socket.on('hangup', () => {
-    socket.broadcast.emit('hangup');
-    const caller = socket.handshake.auth.userName;
-    // Remove any offers made by this user
-    for (let i = offers.length - 1; i >= 0; i--) {
-      if (offers[i].offererUserName === caller) {
-        offers.splice(i, 1);
+    // Only notify users in the same room
+    socket.to(roomId).emit('hangup', userName);
+    
+    // Remove user from room participants
+    if (rooms[roomId]) {
+      const participantIndex = rooms[roomId].participants.indexOf(userName);
+      if (participantIndex !== -1) {
+        rooms[roomId].participants.splice(participantIndex, 1);
+      }
+      
+      // Remove any offers made by this user in this room
+      const roomOffers = rooms[roomId].offers;
+      for (let i = roomOffers.length - 1; i >= 0; i--) {
+        if (roomOffers[i].offererUserName === userName) {
+          roomOffers.splice(i, 1);
+        }
+      }
+      
+      // Broadcast updated offers and participants to room
+      io.to(roomId).emit('availableOffers', rooms[roomId].offers);
+      io.to(roomId).emit('roomParticipants', rooms[roomId].participants);
+      
+      // If room is empty, clean it up
+      if (rooms[roomId].participants.length === 0) {
+        delete rooms[roomId];
       }
     }
-    // Broadcast the updated list to all clients
-    io.emit('availableOffers', offers);
+    
+    // Remove socket from tracking
+    const socketIndex = connectedSockets.findIndex(s => s.socketId === socket.id);
+    if (socketIndex !== -1) {
+      connectedSockets.splice(socketIndex, 1);
+    }
+  });
+  
+  // Handle disconnections
+  socket.on('disconnect', () => {
+    // Clean up the same way as hangup
+    if (rooms[roomId]) {
+      const participantIndex = rooms[roomId].participants.indexOf(userName);
+      if (participantIndex !== -1) {
+        rooms[roomId].participants.splice(participantIndex, 1);
+      }
+      
+      // Remove any offers made by this user in this room
+      const roomOffers = rooms[roomId].offers;
+      for (let i = roomOffers.length - 1; i >= 0; i--) {
+        if (roomOffers[i].offererUserName === userName) {
+          roomOffers.splice(i, 1);
+        }
+      }
+      
+      // Broadcast updated participants to room
+      io.to(roomId).emit('roomParticipants', rooms[roomId].participants);
+      io.to(roomId).emit('availableOffers', rooms[roomId].offers);
+      
+      // If room is empty, clean it up
+      if (rooms[roomId].participants.length === 0) {
+        delete rooms[roomId];
+      }
+    }
+    
+    // Remove socket from tracking
+    const socketIndex = connectedSockets.findIndex(s => s.socketId === socket.id);
+    if (socketIndex !== -1) {
+      connectedSockets.splice(socketIndex, 1);
+    }
   });
 
+});
+
+// API endpoint to get active rooms
+app.get('/rooms', (req, res) => {
+  const activeRooms = Object.keys(rooms).map(roomId => ({
+    roomId,
+    participantCount: rooms[roomId].participants.length
+  }));
+  res.json({ rooms: activeRooms });
 });
 
 // Listen on the port Render (or local) specifies
