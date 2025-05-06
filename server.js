@@ -158,6 +158,15 @@ io.on('connection', socket => {
 
   socket.on('hangup', () => {
     socket.broadcast.emit('hangup');
+    const caller = socket.handshake.auth.userName;
+    // Remove any offers made by this user
+    for (let i = offers.length - 1; i >= 0; i--) {
+      if (offers[i].offererUserName === caller) {
+        offers.splice(i, 1);
+      }
+    }
+    // Broadcast the updated list to all clients
+    io.emit('availableOffers', offers);
   });
 
 });
