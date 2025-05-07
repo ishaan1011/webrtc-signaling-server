@@ -257,6 +257,12 @@ io.on('connection', socket => {
     }
   });
 
+  socket.on('sendMessage', message => {
+    const { roomId, userName } = socket.handshake.auth;
+    // broadcast to everyone in room (including sender if you like)
+    io.to(roomId).emit('receiveMessage', { userName, message });
+  });
+
 });
 
 // API endpoint to get active rooms
