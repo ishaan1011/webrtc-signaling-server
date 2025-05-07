@@ -260,7 +260,7 @@ io.on('connection', socket => {
   socket.on('sendMessage', message => {
     const { roomId, userName } = socket.handshake.auth;
     // broadcast to everyone in room (including sender if you like)
-    io.to(roomId).emit('receiveMessage', { userName, message });
+    socket.to(roomId).emit('receiveMessage', { userName, message });
   });
 
 });
