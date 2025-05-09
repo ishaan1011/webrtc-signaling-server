@@ -48,6 +48,7 @@ async function refreshIceServers() {
     let servers = data.v?.iceServers || data.d?.iceServers || data.iceServers;
     if (!servers) {
       console.error('❌ No iceServers in Xirsys response:', data);
+      return;
     }
     // If Xirsys gave us a single object, wrap it in an array
     if (!Array.isArray(servers)) {
