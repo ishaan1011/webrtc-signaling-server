@@ -44,14 +44,14 @@ async function refreshIceServers() {
     );
 
     const data = response.data;
-    // 2. Pull out the ICE servers array
-    const servers = data.v?.iceServers
-                  || data.d?.iceServers
-                  || data.iceServers
-                  || [];
-    if (!servers.length) {
-      console.error('❌ No iceServers array in Xirsys response:', data);
-      return;
+    // 2. Pull out the ICE servers and normalize to an array
+    let servers = data.v?.iceServers || data.d?.iceServers || data.iceServers;
+    if (!servers) {
+      console.error('❌ No iceServers in Xirsys response:', data);
+    }
+    // If Xirsys gave us a single object, wrap it in an array
+    if (!Array.isArray(servers)) {
+      servers = [servers];
     }
 
     cachedIceServers = servers;
