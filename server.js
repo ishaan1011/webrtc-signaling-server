@@ -124,6 +124,10 @@ io.on('connection', socket => {
 
   // ── TRICKLE ICE FORWARDING ────────────────────────────────────────────────────
   socket.on('newIceCandidate', ({ candidate }) => {
+    console.log(
+      `[server] got newIceCandidate from ${userName} in room ${roomId}:`,
+      candidate.candidate || candidate
+    );
     socket.to(roomId).emit('newIceCandidate', { candidate });
   });
 
