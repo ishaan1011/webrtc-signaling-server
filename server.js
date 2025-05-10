@@ -122,6 +122,11 @@ io.on('connection', socket => {
   // Broadcast updated participant list to everyone in the room
   io.to(roomId).emit('roomParticipants', rooms[roomId].participants);
 
+  // ── TRICKLE ICE FORWARDING ────────────────────────────────────────────────────
+  socket.on('newIceCandidate', ({ candidate }) => {
+    socket.to(roomId).emit('newIceCandidate', { candidate });
+  });
+
   // Send any existing offers in this room to newcomers
   if (rooms[roomId].offers.length) {
     socket.emit('availableOffers', rooms[roomId].offers);
