@@ -54,7 +54,17 @@ async function refreshIceServers() {
       return;
     }
 
-    cachedIceServers = servers;
+    // 🔧 NORMALISE url → urls  (Xirsys still returns the old key)
+    cachedIceServers = servers.map(s => {
+      // If Xirsys already gave you urls, leave them; otherwise wrap url
+      const urls = s.urls || (s.url ? [s.url] : []);
+      return {
+        urls,
+        username: s.username,
+        credential: s.credential
+      };
+    });
+    
     console.log('🔄 ICE servers refreshed:', cachedIceServers);
 
   } catch (err) {
