@@ -5,6 +5,9 @@ const path = require('path');
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const http = require('http');
 const socketio = require('socket.io');
 
@@ -16,6 +19,42 @@ app.use(cors({
   methods: ['GET', 'POST']
 }));
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Recording upload endpoint ────────────────────────────────────────────
+// Temporarily store uploads, then move into a per-session folder
+const upload = multer({ dest: 'tmp/' });
+
+app.post('/recordings', upload.fields([
+  { name: 'video',    maxCount: 1 },
+  { name: 'metadata', maxCount: 1 }
+]), (req, res) => {
+  try {
+    // Create a new directory for this session
+    const sessionId  = Date.now().toString();
+    const sessionDir = path.join(__dirname, 'recordings', sessionId);
+    fs.mkdirSync(sessionDir, { recursive: true });
+
+    // Move video blob
+    const vid = req.files.video[0];
+    fs.renameSync(vid.path, path.join(sessionDir, 'full.webm'));
+
+    // Move metadata JSON
+    const meta = req.files.metadata[0];
+    fs.renameSync(meta.path, path.join(sessionDir, 'metadata.json'));
+
+    return res.status(200).send('OK');
+  } catch (err) {
+    console.error('Error saving recording:', err);
+    return res.status(500).send('Error saving recording');
+  }
+});
+// ──────────────────────────────────────────────────────────────────────────
+
+// (Optional) serve saved recordings back at /recordings/*
+app.use(
+  '/recordings',
+  express.static(path.join(__dirname, 'recordings'))
+);
 
 // Health check for Render
 app.get('/healthz', (req, res) => res.send('OK'));
