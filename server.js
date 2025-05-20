@@ -49,6 +49,18 @@ app.post('/recordings', upload.fields([
 });
 // ──────────────────────────────────────────────────────────────────────────
 
+// ─── Add this GET /recordings listing ────────────────────────────────────
+app.get('/recordings', (req, res) => {
+  const recordingsPath = path.join(__dirname, 'recordings');
+  if (!fs.existsSync(recordingsPath)) {
+    return res.json({ sessions: [] });
+  }
+  const sessions = fs.readdirSync(recordingsPath)
+                     .filter(name => fs.lstatSync(path.join(recordingsPath, name)).isDirectory());
+  res.json({ sessions });
+});
+// ──────────────────────────────────────────────────────────────────────────
+
 // (Optional) serve saved recordings back at /recordings/*
 app.use(
   '/recordings',
