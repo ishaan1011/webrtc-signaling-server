@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Clips for Meeting</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+    #feed {
+      height:100vh;
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      background: #000;
+    }
+    .item {
+      scroll-snap-align: start;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .item video {
+      max-width: 100%;
+      max-height: 100%;
+    }
+    /* simple back-link */
+    #back {
+      position: fixed; top: 1rem; left: 1rem; z-index: 100;
+      background: rgba(0,0,0,0.5); color: #fff; padding: .5rem 1rem;
+      text-decoration: none; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <a id="back" href="/recordings">← Meetings</a>
+  <div id="feed"></div>
+
+  <script>
+    (async () => {
+      const feed = document.getElementById('feed');
+      const roomId = location.pathname.split('/').pop();
+      // fetch the clips
+      const res = await fetch('/api/recordings/' + roomId);
+      if (!res.ok) {
+        feed.innerHTML = '<p style="color:#fff; padding:2rem;">No clips found.</p>';
+        return;
+      }
+      const { clips } = await res.json();
+      if (!clips.length) {
+        feed.innerHTML = '<p style="color:#fff; padding:2rem;">No clips in this meeting yet.</p>';
+        return;
+      }
+      // render each clip
+      clips.sort((a,b)=> new Date(a.metadata.startTime) - new Date(b.metadata.startTime));
+      for (const { sessionId, metadata } of clips) {
+        const div = document.createElement('div');
+        div.className = 'item';
+        const video = document.createElement('video');
+        video.src = `/recordings/files/${sessionId}/full.webm`;
+        video.controls = true;
+        video.loop     = true;
+        video.muted    = true;
+        video.playsInline = true;
+        div.appendChild(video);
+        feed.appendChild(div);
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -23,7 +23,7 @@ app.use(cors({
 // Temporarily store uploads, then move into a per-session folder
 const upload = multer({ dest: 'tmp/' });
 
-app.post('/recordings', upload.fields([
+app.post('/api/recordings', upload.fields([
   { name: 'video',    maxCount: 1 },
   { name: 'metadata', maxCount: 1 }
 ]), (req, res) => {
@@ -49,23 +49,73 @@ app.post('/recordings', upload.fields([
 });
 // ──────────────────────────────────────────────────────────────────────────
 
-// ─── Add this GET /recordings listing ────────────────────────────────────
-app.get('/recordings', (req, res) => {
+// ─── 1. List all meetings (unique roomIds) ───────────────────────────────
+app.get('/api/recordings', (req, res) => {
   const recordingsPath = path.join(__dirname, 'recordings');
-  if (!fs.existsSync(recordingsPath)) {
-    return res.json({ sessions: [] });
-  }
+  if (!fs.existsSync(recordingsPath)) return res.json({ meetings: [] });
+
   const sessions = fs.readdirSync(recordingsPath)
-                     .filter(name => fs.lstatSync(path.join(recordingsPath, name)).isDirectory());
-  res.json({ sessions });
+    .filter(d => fs.lstatSync(path.join(recordingsPath, d)).isDirectory());
+
+  const meetings = new Set();
+  sessions.forEach(sess => {
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(recordingsPath, sess, 'metadata.json')));
+      if (meta.roomId) meetings.add(meta.roomId);
+    } catch {}
+  });
+
+  res.json({ meetings: Array.from(meetings) });
 });
 // ──────────────────────────────────────────────────────────────────────────
 
-// (Optional) serve saved recordings back at /recordings/*
+
+// ─── 2. List all clips for one meeting ────────────────────────────────────
+app.get('/api/recordings/:roomId', (req, res) => {
+  const { roomId } = req.params;
+  const recordingsPath = path.join(__dirname, 'recordings');
+  if (!fs.existsSync(recordingsPath)) return res.json({ clips: [] });
+
+  const sessions = fs.readdirSync(recordingsPath)
+    .filter(d => fs.lstatSync(path.join(recordingsPath, d)).isDirectory());
+
+  const clips = sessions.flatMap(sess => {
+    const metaPath = path.join(recordingsPath, sess, 'metadata.json');
+    if (!fs.existsSync(metaPath)) return [];
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaPath));
+      if (meta.roomId === roomId) {
+        return [{ sessionId: sess, metadata: meta }];
+      }
+    } catch {}
+    return [];
+  });
+
+  res.json({ clips });
+});
+// ──────────────────────────────────────────────────────────────────────────
+
+
+// ─── 3. Serve your recordings UI under ./public/recordings/ ───────────────
+//  (make sure you have public/recordings/index.html & meeting.html)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Visiting /recordings           → public/recordings/index.html
+app.get('/recordings', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/recordings/index.html'));
+});
+
+// Visiting /recordings/:roomId  → public/recordings/meeting.html
+app.get('/recordings/:roomId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/recordings/meeting.html'));
+});
+
+// 4) Serve raw files at /recordings/files/<sessionId>/*
 app.use(
-  '/recordings',
+  '/recordings/files',
   express.static(path.join(__dirname, 'recordings'))
 );
+// ──────────────────────────────────────────────────────────────────────────
 
 // Health check for Render
 app.get('/healthz', (req, res) => res.send('OK'));
