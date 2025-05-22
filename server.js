@@ -174,7 +174,7 @@ app.post(
   express.json({ limit: '200kb' }),
   async (req, res) => {
     try {
-      const { text } = req.body;
+      const text = req.body?.text;
       if (!text) return res.status(400).json({ error: 'No "text" provided' });
 
       // 1) call ElevenLabs
@@ -188,10 +188,20 @@ app.post(
       });
       return res.send(audioBuffer);
     } catch (err) {
-      console.error('❌ /bot/tts error:', err.message, err.response?.data);
+      // Unwrap any Buffer payload from Axios
+      let detail = err.response?.data;
+      if (detail && Buffer.isBuffer(detail)) {
+        const str = detail.toString('utf8');
+        try {
+          detail = JSON.parse(str);
+        } catch {
+          detail = str;
+        }
+      }
+      console.error('❌ /bot/tts error:', err.message, detail);
       return res.status(500).json({
         error:   'TTS generation failed',
-        details: err.response?.data || err.message
+        details: detail || err.message
       });
     }
   }
