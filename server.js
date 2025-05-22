@@ -1,15 +1,16 @@
 // server.js
-require('dotenv').config();
+import 'dotenv/config';
 
-const path = require('path');
-const express = require('express');
+import path    from 'path';
+import express from 'express';
+import axios   from 'axios';
+import cors    from 'cors';
+import multer  from 'multer';
+import fs      from 'fs';
+import http    from 'http';
+import { Server as SocketIO } from 'socket.io';
+
 import { generateReply } from './llm.js';
-const axios = require('axios');
-const cors = require('cors');
-const multer = require('multer');
-const fs = require('fs');
-const http = require('http');
-const socketio = require('socket.io');
 
 const app = express();
 
@@ -212,7 +213,7 @@ app.get('/ice', (req, res) => {
 const server = http.createServer(app);
 
 // Socket.io with CORS set by env var (e.g. your Vercel URL)
-const io = socketio(server, {
+const io = new SocketIO(server, {
   cors: {
     origin: process.env.CORS_ORIGIN,
     methods: ['GET', 'POST']

@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "webrtc-signaling-server",
   "version": "1.0.0",
   "description": "Express + Socket.IO signaling server for WebRTC",
