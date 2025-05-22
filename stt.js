@@ -2,7 +2,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { Groq } from 'groq';
+import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
 
 dotenv.config();
