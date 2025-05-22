@@ -171,7 +171,7 @@ app.post(
 // TTS endpoint: accepts { text } and returns audio bytes (Opus/WebM)
 app.post(
   '/bot/tts',
-  // express.json({ limit: '200kb' }),
+  express.json({ limit: '200kb' }),
   async (req, res) => {
     try {
       const { text } = req.body;
