@@ -52,14 +52,20 @@ export async function transcribeAudio(
       temperature: 0.0
     });
   } else {
-    result = await client.audio.transcriptions.create({
+    // Build the options object without a null field
+    const opts = {
       file: fileStream,
       model: modelName,
       prompt,
       response_format: 'text',
-      temperature: 0.0,
-      language: language === 'auto' ? null : language
-    });
+      temperature: 0.0
+    };
+    // Only include language if user requested a specific one
+    if (!translate && language !== 'auto') {
+      opts.language = language;
+    }
+
+    result = await client.audio.transcriptions.create(opts);
   }
 
   // 4) clean up
