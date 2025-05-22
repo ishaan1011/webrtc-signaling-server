@@ -171,7 +171,7 @@ app.post(
 // TTS endpoint: accepts { text } and returns audio bytes (Opus/WebM)
 app.post(
   '/bot/tts',
-  express.json({ limit: '200kb' }),
+  // express.json({ limit: '200kb' }),
   async (req, res) => {
     try {
       const { text } = req.body;
@@ -188,8 +188,11 @@ app.post(
       });
       return res.send(audioBuffer);
     } catch (err) {
-      console.error('❌ /bot/tts error:', err);
-      return res.status(500).json({ error: 'TTS generation failed' });
+      console.error('❌ /bot/tts error:', err.message, err.response?.data);
+      return res.status(500).json({
+        error:   'TTS generation failed',
+        details: err.response?.data || err.message
+      });
     }
   }
 );
