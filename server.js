@@ -3,6 +3,7 @@ require('dotenv').config();
 
 const path = require('path');
 const express = require('express');
+import { generateReply } from './llm.js';
 const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
@@ -116,6 +117,27 @@ app.use(
   express.static(path.join(__dirname, 'recordings'))
 );
 // ──────────────────────────────────────────────────────────────────────────
+
+// ─── Bot reply endpoint ───────────────────────────────────────────────
+// Accepts JSON { "text": "…question or transcript…" }
+// Returns JSON { "reply": "…assistant response text…" }
+app.use(express.json({ limit: '1mb' }));
+app.post('/bot/reply', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'No "text" provided' });
+
+    // 1) Generate the LLM reply
+    const reply = await generateReply(text);
+
+    // 2) Send it back
+    return res.json({ reply });
+  } catch (err) {
+    console.error('❌ /bot/reply error:', err);
+    return res.status(500).json({ error: 'Bot reply failed' });
+  }
+});
++  // ─────────────────────────────────────────────────────────────────────
 
 // Health check for Render
 app.get('/healthz', (req, res) => res.send('OK'));
