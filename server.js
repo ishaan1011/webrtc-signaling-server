@@ -15,6 +15,7 @@ import { Server as SocketIO } from 'socket.io';
 
 import { generateReply } from './llm.js';
 import { transcribeAudio } from './stt.js';
+import { generateAudio } from './tts.js';
 
 const app = express();
 
@@ -163,6 +164,32 @@ app.post(
       if (req.file) {
         await fs.promises.unlink(req.file.path).catch(() => {/* ignore */});
       }
+    }
+  }
+);
+
+// TTS endpoint: accepts { text } and returns audio bytes (Opus/WebM)
+app.post(
+  '/bot/tts',
+  express.json({ limit: '200kb' }),
+  async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) return res.status(400).json({ error: 'No "text" provided' });
+
+      // 1) call ElevenLabs
+      const audioBuffer = await generateAudio(text);
+
+      // 2) stream back as WebM/Opus
+      res.set({
+        'Content-Type':        'audio/webm; codecs=opus',
+        'Content-Length':      audioBuffer.length,
+        'Cache-Control':       'no-cache'
+      });
+      return res.send(audioBuffer);
+    } catch (err) {
+      console.error('❌ /bot/tts error:', err);
+      return res.status(500).json({ error: 'TTS generation failed' });
     }
   }
 );
