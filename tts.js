@@ -33,5 +33,5 @@ export async function generateAudio(text) {
     responseType: 'arraybuffer',
     timeout: 15000
   });
-  return Buffer.from(resp.data);
+  return resp;
 }

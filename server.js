@@ -177,12 +177,14 @@ app.post(
       const text = req.body?.text;
       if (!text) return res.status(400).json({ error: 'No "text" provided' });
 
-      // 1) call ElevenLabs
-      const audioBuffer = await generateAudio(text);
+      // 1) get the raw axios response from ElevenLabs
+      const elevenResp = await generateAudio(text);
+      const audioBuffer = Buffer.from(elevenResp.data);
+      const contentType = elevenResp.headers['content-type'] || 'application/octet-stream';
 
-      // 2) stream back as WebM/Opus
+      // 2) proxy back the exact Content-Type
       res.set({
-        'Content-Type':        'audio/webm; codecs=opus',
+        'Content-Type':        contentType,
         'Content-Length':      audioBuffer.length,
         'Cache-Control':       'no-cache'
       });
