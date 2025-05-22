@@ -14,6 +14,7 @@ import http    from 'http';
 import { Server as SocketIO } from 'socket.io';
 
 import { generateReply } from './llm.js';
+import { transcribeAudio } from './stt.js';
 
 const app = express();
 
@@ -122,26 +123,50 @@ app.use(
 );
 // ──────────────────────────────────────────────────────────────────────────
 
-// ─── Bot reply endpoint ───────────────────────────────────────────────
-// Accepts JSON { "text": "…question or transcript…" }
-// Returns JSON { "reply": "…assistant response text…" }
-app.use(express.json({ limit: '1mb' }));
-app.post('/bot/reply', async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: 'No "text" provided' });
+// Bot reply endpoint:
+//  • If client POSTs multipart/form-data with field "audio", we STT → LLM.
+//  • Else if client POSTs JSON { text }, we skip STT and go straight to LLM.
+// Returns JSON { reply: "…assistant response text…" }.
+app.post(
+  '/bot/reply',
+  upload.single('audio'),           // parse an uploaded audio file
+  express.json({ limit: '1mb' }),   // parse JSON text fallback
+  async (req, res) => {
+    try {
+      let userText;
 
-    // 1) Generate the LLM reply
-    const reply = await generateReply(text);
+      if (req.file) {
+        // 1) Audio path: read and transcribe
+        const audioBuf = await fs.promises.readFile(req.file.path);
+        userText = await transcribeAudio(audioBuf, {
+          prompt:   '',        // optional STT prompt
+          language: 'auto',
+          translate: false
+        });
+      } else if (req.body.text) {
+        // 2) JSON text path
+        userText = req.body.text;
+      } else {
+        return res.status(400).json({ error: 'No audio or text provided' });
+      }
 
-    // 2) Send it back
-    return res.json({ reply });
-  } catch (err) {
-    console.error('❌ /bot/reply error:', err);
-    return res.status(500).json({ error: 'Bot reply failed' });
+      // 3) LLM reply
+      const replyText = await generateReply(userText);
+
+      // 4) Return JSON
+      return res.json({ reply: replyText });
+    } catch (err) {
+      console.error('❌ /bot/reply error:', err);
+      return res.status(500).json({ error: 'Bot reply failed', details: err.toString() });
+    } finally {
+      // Clean up uploaded file
+      if (req.file) {
+        await fs.promises.unlink(req.file.path).catch(() => {/* ignore */});
+      }
+    }
   }
-});
-+  // ─────────────────────────────────────────────────────────────────────
+);
+// ─────────────────────────────────────────────────────────────────────
 
 // Health check for Render
 app.get('/healthz', (req, res) => res.send('OK'));
