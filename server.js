@@ -137,7 +137,12 @@ app.post(
     try {
       let userText;
 
-      if (req.file) {
+      // 1) JSON text path (highest priority)
+      if (req.body?.text) {
+        userText = req.body.text;
+      }
+      // 2) Audio path
+      else if (req.file) {
         // 1) Audio path: read and transcribe
         const audioBuf = await fs.promises.readFile(req.file.path);
         userText = await transcribeAudio(audioBuf, {
@@ -145,10 +150,9 @@ app.post(
           language: 'auto',
           translate: false
         });
-      } else if (req.body.text) {
-        // 2) JSON text path
-        userText = req.body.text;
-      } else {
+      }
+      // 3) Neither provided
+      else {
         return res.status(400).json({ error: 'No audio or text provided' });
       }
 
