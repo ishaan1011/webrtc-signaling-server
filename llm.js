@@ -28,7 +28,7 @@ export async function generateReply(prompt) {
     `&queryconstraint=speaker_t:%22${encodeURIComponent(whoseavatar)}%22` +
     `&details=1` +
     `&numutter=${numutter}` +
-    `&status=${encodeURIComponent(userText)}`;
+    `&status=${encodeURIComponent(prompt)}`;
 
   try{
     const resp = await axios.get(apiUrl);
