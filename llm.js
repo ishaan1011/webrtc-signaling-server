@@ -30,11 +30,20 @@ export async function generateReply(prompt) {
     `&numutter=${numutter}` +
     `&status=${encodeURIComponent(userText)}`;
 
-  const resp = await axios.get(apiUrl);
-  const entries = resp.data?.contents?.[0] || [];
-  if (entries.length) {
-    // take the first “snippet” (or fallback to title)
-    return entries[0].snippet || entries[0].title || '';
+  try{
+    const resp = await axios.get(apiUrl);
+    const entries = resp.data?.contents?.[0] || [];
+    if (entries.length) {
+      // take the first “snippet” (or fallback to title)
+      return entries[0].snippet || entries[0].title || '';
+    }
+    return 'No response from Avatar API';
+  } catch (e) {
+    // log the real error so you can inspect it in your Render logs
+    console.error('[generateReply] Avatar API failed:', e.response?.data || e.message);
+    // return a sensible fallback instead of throwing
+    return `Avatar API error: ${e.message}`;
   }
-  return 'No response from Avatar API';
+
+
 }
