@@ -34,12 +34,8 @@ export async function generateReply(prompt) {
 
   try{
     const resp = await axios.get(apiUrl);
-    const entries = resp.data?.contents?.[0] || [];
-    if (entries.length) {
-      // take the first “snippet” (or fallback to title)
-      return entries[0].snippet || entries[0].title || '';
-    }
-    return 'No response from Avatar API';
+    // Return the full raw API JSON (pretty-printed) so the client sees everything
+    return JSON.stringify(resp.data, null, 2);
   } catch (e) {
     // log the real error so you can inspect it in your Render logs
     console.error('[generateReply] Avatar API failed:', e.response?.data || e.message);
