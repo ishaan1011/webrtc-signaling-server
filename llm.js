@@ -5,6 +5,8 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+import axios from 'axios';
+
 export async function generateReply(prompt) {
   // const resp = await openai.chat.completions.create({
   //   model: "gpt-4o-mini",
