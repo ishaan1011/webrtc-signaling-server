@@ -493,6 +493,11 @@ io.on('connection', socket => {
     socket.to(roomId).emit('receiveMessage', { userName, message });
   });
 
+  socket.on('avatarOutput', json => {
+    const roomId = socket.handshake.auth.roomId;
+    socket.to(roomId).emit('avatarOutput', json);
+  });
+
 });
 
 // API endpoint to get active rooms
