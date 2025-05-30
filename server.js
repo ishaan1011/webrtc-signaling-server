@@ -225,55 +225,76 @@ app.get('/healthz', (req, res) => res.send('OK'));
 let cachedIceServers = [];
 
 
-async function refreshIceServers() {
-  try {
-    // 1. Make a PUT to the Xirsys _turn endpoint (no ?format parameter)
-    const response = await axios.put(
-      process.env.XIRSYS_ENDPOINT,
-      {}, // empty body
-      {
-        auth: {
-          username: process.env.XIRSYS_IDENT,
-          password: process.env.XIRSYS_SECRET
-        },
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+// async function refreshIceServers() {
+//   try {
+//     // 1. Make a PUT to the Xirsys _turn endpoint (no ?format parameter)
+//     const response = await axios.put(
+//       process.env.XIRSYS_ENDPOINT,
+//       {}, // empty body
+//       {
+//         auth: {
+//           username: process.env.XIRSYS_IDENT,
+//           password: process.env.XIRSYS_SECRET
+//         },
+//         headers: {
+//           'Content-Type': 'application/json'
+//         }
+//       }
+//     );
 
-    const data = response.data;
-    // 2. Pull out the ICE servers array
-    const servers = data.v?.iceServers
-                  || data.d?.iceServers
-                  || data.iceServers
-                  || [];
-    if (!servers.length) {
-      console.error('❌ No iceServers array in Xirsys response:', data);
-      return;
-    }
+//     const data = response.data;
+//     // 2. Pull out the ICE servers array
+//     const servers = data.v?.iceServers
+//                   || data.d?.iceServers
+//                   || data.iceServers
+//                   || [];
+//     if (!servers.length) {
+//       console.error('❌ No iceServers array in Xirsys response:', data);
+//       return;
+//     }
 
-    // 🔧 NORMALISE url → urls  (Xirsys still returns the old key)
-    cachedIceServers = servers.map(s => {
-      // If Xirsys already gave you urls, leave them; otherwise wrap url
-      const urls = s.urls || (s.url ? [s.url] : []);
-      return {
-        urls,
-        username: s.username,
-        credential: s.credential
-      };
-    });
+//     // 🔧 NORMALISE url → urls  (Xirsys still returns the old key)
+//     cachedIceServers = servers.map(s => {
+//       // If Xirsys already gave you urls, leave them; otherwise wrap url
+//       const urls = s.urls || (s.url ? [s.url] : []);
+//       return {
+//         urls,
+//         username: s.username,
+//         credential: s.credential
+//       };
+//     });
     
-    console.log('🔄 ICE servers refreshed:', cachedIceServers);
+//     console.log('🔄 ICE servers refreshed:', cachedIceServers);
 
-  } catch (err) {
-    console.error('❌ Error fetching ICE servers:', err.message);
-  }
+//   } catch (err) {
+//     console.error('❌ Error fetching ICE servers:', err.message);
+//   }
+// }
+
+// // Initial fetch and periodic refresh every hour
+// refreshIceServers();
+// setInterval(refreshIceServers, 1000 * 60 * 60);
+
+// ─── USE ONLY YOUR EC2 coturn ───────────────────────────────
+async function refreshIceServers() {
+  cachedIceServers = [
+    {
+      urls: [
+        'turn:54.210.247.10:3478?transport=udp',
+        'turn:54.210.247.10:3478?transport=tcp'
+        // if you enabled TLS on 5349, add:
+        // 'turns:54.210.247.10:5349?transport=tcp'
+      ],
+      username: process.env.TURN_USER || 'webrtc',
+      credential: process.env.TURN_PASS || 'webrtc'
+    }
+  ];
+  console.log('🔄 ICE servers (only EC2 TURN):', cachedIceServers);
 }
 
-// Initial fetch and periodic refresh every hour
+// Set once (no need to refresh unless your creds rotate)
 refreshIceServers();
-setInterval(refreshIceServers, 1000 * 60 * 60);
+
 
 // Expose ICE config to clients
 app.get('/ice', (req, res) => {
