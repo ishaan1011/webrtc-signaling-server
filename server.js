@@ -229,7 +229,7 @@ async function refreshIceServers() {
   try {
     // 1. Make a PUT to the Xirsys _turn endpoint (no ?format parameter)
     const response = await axios.put(
-      `${process.env.XIRSYS_ENDPOINT}?format=urls`,
+      process.env.XIRSYS_ENDPOINT,
       {}, // empty body
       {
         auth: {
