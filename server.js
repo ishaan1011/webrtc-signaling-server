@@ -1,6 +1,20 @@
 // server.js
 import 'dotenv/config';
+import mongoose from 'mongoose';
+import Workspace from './models/Workspace.js';
+import Thread    from './models/Thread.js';
+import Message   from './models/Message.js';
 
+mongoose
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  })
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 import path    from 'path';
 import { fileURLToPath } from 'url';
@@ -25,7 +39,115 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN,   // your Vercel URL
   methods: ['GET', 'POST']
 }));
+
+app.use(express.json());
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─── WORKSPACE ROUTES ─────────────────────────────────────────────────────────
+
+// Create a new workspace
+app.post('/api/workspaces', async (req, res) => {
+  try {
+    const { name, createdBy } = req.body;
+    if (!name || !createdBy) {
+      return res.status(400).json({ error: 'name and createdBy are required' });
+    }
+    const ws = new Workspace({ name, createdBy });
+    await ws.save();
+    return res.status(201).json(ws);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// List all workspaces
+app.get('/api/workspaces', async (req, res) => {
+  try {
+    const all = await Workspace.find().sort({ createdAt: -1 });
+    return res.json(all);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+// ─── THREAD (CHANNEL) ROUTES ────────────────────────────────────────────────────
+
+// Create a new thread (channel) under a workspace
+app.post('/api/workspaces/:workspaceId/threads', async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    const { name, createdBy } = req.body;
+    if (!name || !createdBy) {
+      return res.status(400).json({ error: 'Thread name and createdBy required' });
+    }
+    // (Optionally: verify workspaceId exists)
+    const thread = new Thread({ workspaceId, name, createdBy });
+    await thread.save();
+    return res.status(201).json(thread);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// List all threads for a workspace
+app.get('/api/workspaces/:workspaceId/threads', async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    const threads = await Thread.find({ workspaceId }).sort({ createdAt: 1 });
+    return res.json(threads);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+
+// ─── MESSAGE ROUTES ────────────────────────────────────────────────────────────
+
+// Post a message into a thread
+app.post('/api/threads/:threadId/messages', async (req, res) => {
+  try {
+    const { threadId } = req.params;
+    const { workspaceId, sender, content, contentType = 'text', mediaUrl = '' } = req.body;
+    if (!workspaceId || !sender || !content) {
+      return res.status(400).json({ error: 'workspaceId, sender, and content required.' });
+    }
+    // (Optionally: verify threadId & workspaceId belong together)
+    const msg = new Message({ workspaceId, threadId, sender, content, contentType, mediaUrl });
+    await msg.save();
+    return res.status(201).json(msg);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Fetch message history for a thread (paginated)
+app.get('/api/threads/:threadId/messages', async (req, res) => {
+  try {
+    const { threadId } = req.params;
+    // cursor-based or offset-based pagination (for simplicity, use ?before=<timestamp>&limit=20)
+    const { before, limit = 20 } = req.query;
+    const query = { threadId };
+    if (before) {
+      query.createdAt = { $lt: new Date(before) };
+    }
+    // Sort descending to get newest first, then reverse on the client (or vice versa)
+    const msgs = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit, 10));
+
+    return res.json({ messages: msgs });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // ─── Recording upload endpoint ────────────────────────────────────────────
 // Temporarily store uploads, then move into a per-session folder
@@ -487,10 +609,59 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('sendMessage', message => {
-    const { roomId, userName } = socket.handshake.auth;
-    // broadcast to everyone in room (including sender if you like)
-    socket.to(roomId).emit('receiveMessage', { userName, message });
+  socket.on('joinThread', async ({ threadId, workspaceId, userName }) => {
+    // 1) (Optional) Validate that threadId exists in MongoDB:
+    const thread = await Thread.findById(threadId);
+    if (!thread) return socket.emit('errorMessage', 'Thread not found');
+
+    // 2) Have this socket join the Socket.IO room:
+    socket.join(threadId);
+
+    // 3) (Optional) Broadcast to everyone in that room that someone joined:
+    socket.to(threadId).emit('threadUserJoined', {
+      threadId,
+      userName,
+      timestamp: new Date()
+    });
+  });
+
+  socket.on('sendMessage', async (payload) => {
+    try {
+      const {
+        threadId,
+        workspaceId,
+        sender,
+        content,
+        contentType = 'text',
+        mediaUrl = ''
+      } = payload;
+
+      // 1) Save to MongoDB
+      const msg = new Message({
+        workspaceId,
+        threadId,
+        sender,
+        content,
+        contentType,
+        mediaUrl
+      });
+      await msg.save();
+
+      // 2) Broadcast the _saved_ message to everyone in this thread room
+      io.to(threadId).emit('receiveMessage', {
+        _id: msg._id,
+        workspaceId: msg.workspaceId,
+        threadId: msg.threadId,
+        sender: msg.sender,
+        content: msg.content,
+        contentType: msg.contentType,
+        mediaUrl: msg.mediaUrl,
+        createdAt: msg.createdAt
+      });
+    } catch (err) {
+      console.error('Error saving or broadcasting message:', err);
+      socket.emit('errorMessage', 'Failed to save message');
+    }
   });
 
   socket.on('avatarOutput', json => {
