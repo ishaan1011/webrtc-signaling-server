@@ -68,7 +68,15 @@ export async function googleAuth(req, res, next) {
 };
 
 // optional: get current user
-export async function me(req, res, next) {
-  const u = await User.findById(req.user.id).select('-passwordHash -googleId');
-  res.json({ user: u });
+export async function me(req, res) {
+  const u = await User.findById(req.user.id).select('email username fullName avatarUrl');
+  return res.json({
+    user: {
+      id: u._id.toString(),
+      email: u.email,
+      username: u.username,
+      fullName: u.fullName,
+      avatarUrl: u.avatarUrl
+    }
+  });
 };
