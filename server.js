@@ -25,7 +25,7 @@ import authMiddleware from './src/middleware/auth.js';
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { connectDB } from './config/database.js';
+import { connectDB } from './src/config/database.js';
 
 const app = express();
 
