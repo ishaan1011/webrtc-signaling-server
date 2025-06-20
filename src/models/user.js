@@ -1,24 +1,28 @@
-import mongoose from 'mongoose';
-import bcrypt from 'bcrypt';
+// src/models/user.js
+import mongoose from 'mongoose'
+import bcrypt from 'bcryptjs'
 
-const userSchema = new mongoose.Schema({
-  email:      { type: String, required: true, unique: true },
-  username:   { type: String, required: true, unique: true },
-  fullName:   { type: String },
-  avatarUrl:  { type: String },
-  passwordHash: { type: String },         // only for local auth
-  googleId:   { type: String },           // only for Google OAuth
-}, { timestamps: true });
+const { Schema } = mongoose
 
-// hash password on set
-userSchema.virtual('password')
-  .set(function(pw) {
-    this.passwordHash = bcrypt.hashSync(pw, 10);
-  });
+const UserSchema = new Schema({
+  username: { type: String, unique: false, sparse: true },
+  name:     { type: String, required: true },
+  email:    { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+})
 
-// compare plain text to hash
-userSchema.methods.verifyPassword = function(pw) {
-  return bcrypt.compareSync(pw, this.passwordHash);
-};
+// hash password before save
+UserSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next()
+  const salt = await bcrypt.genSalt(10)
+  this.password = await bcrypt.hash(this.password, salt)
+  next()
+})
 
-export default mongoose.model('User', userSchema);
+// method to compare password
+UserSchema.methods.comparePassword = function (candidate) {
+  return bcrypt.compare(candidate, this.password)
+}
+
+const User = mongoose.model('User', UserSchema)
+export default User

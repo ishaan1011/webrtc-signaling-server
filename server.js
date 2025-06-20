@@ -30,13 +30,44 @@ import { connectDB } from './src/config/database.js';
 
 const app = express();
 
+app.use(helmet());
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+}));
+
+console.log('starting…');
+
 // ── connect MongoDB ─────────────────────────────────────────────
-connectDB()
-  .then(() => console.log('✅ MongoDB Atlas connected'))
-  .catch(err => {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  });
+;(async () => {
+  try {
+    // 1) Connect to MongoDB
+    await connectDB()
+    console.log('✅ MongoDB Atlas connected')
+
+    // // 2) (Optional) Drop the entire database
+    // await mongoose.connection.db.dropDatabase()
+    // console.log('🗑  Dropped entire comm360 database')
+
+    // 3) (Optional) Drop the old username index
+    try {
+      await mongoose.connection.db
+        .collection('users')
+        .dropIndex('username_1')
+      console.log('🗑  Dropped users.username_1 index')
+    } catch (err) {
+      if (err.codeName === 'IndexNotFound') {
+        console.log('✔  username_1 index not found; skipping')
+      } else {
+        console.warn('⚠️  Could not drop username_1 index:', err.message)
+      }
+    }
+
+  } catch (err) {
+    console.error('❌ Startup error:', err)
+    process.exit(1)
+  }
+})()
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -53,9 +84,6 @@ app.use('/api/auth', authRoutes);
 
 // ─── Protect all other /api routes with JWT auth ───────────────────────────
 app.use('/api', authMiddleware);
-
-app.use(helmet());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
 // ─── Recording upload endpoint ────────────────────────────────────────────
 // Temporarily store uploads, then move into a per-session folder
@@ -341,9 +369,11 @@ const server = http.createServer(app);
 // Socket.io with CORS set by env var (e.g. your Vercel URL)
 const io = new SocketIO(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN,
-    methods: ['GET', 'POST']
-  }
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  path: '/socket.io' 
 });
 
 // ── Socket Authentication ───────────────────────────────────────────────
