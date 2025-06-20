@@ -1,7 +1,6 @@
-require('dotenv').config();
-const { OAuth2Client } = require('google-auth-library');
-const jwt     = require('jsonwebtoken');
-const User    = require('../models/user');
+import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
+import User from '../models/user.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -14,7 +13,7 @@ function signToken(user) {
   );
 }
 
-exports.register = async (req, res, next) => {
+export async function register(req, res, next) {
   try {
     const { email, username, fullName, password } = req.body;
     // create user and hash pw via virtual
@@ -28,7 +27,7 @@ exports.register = async (req, res, next) => {
   }
 };
 
-exports.login = async (req, res, next) => {
+export async function login(req, res, next) {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
@@ -42,7 +41,7 @@ exports.login = async (req, res, next) => {
   }
 };
 
-exports.googleAuth = async (req, res, next) => {
+export async function googleAuth(req, res, next) {
   try {
     const { idToken } = req.body;
     const ticket = await googleClient.verifyIdToken({
@@ -69,7 +68,7 @@ exports.googleAuth = async (req, res, next) => {
 };
 
 // optional: get current user
-exports.me = async (req, res, next) => {
+export async function me(req, res, next) {
   const u = await User.findById(req.user.id).select('-passwordHash -googleId');
   res.json({ user: u });
 };
