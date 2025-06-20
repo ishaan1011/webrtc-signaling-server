@@ -6,18 +6,38 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 import express from 'express';
+import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
 import axios   from 'axios';
 import cors    from 'cors';
 import multer  from 'multer';
 import fs      from 'fs';
 import http    from 'http';
 import { Server as SocketIO } from 'socket.io';
+import User    from './src/models/user.js';
 
 import { generateReply } from './llm.js';
 import { transcribeAudio } from './stt.js';
 import { generateAudio } from './tts.js';
 
+import authRoutes from './src/routes/auth.js';
+import authMiddleware from './src/middleware/auth.js';
+
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
 const app = express();
+
+// ── connect MongoDB ─────────────────────────────────────────────
+connectDB()
+  .then(() => console.log('✅ MongoDB Atlas connected'))
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ─── Enable CORS for your front-end origin ──────────────────────────────────
 app.use(cors({
@@ -25,6 +45,15 @@ app.use(cors({
   methods: ['GET', 'POST']
 }));
 // ─────────────────────────────────────────────────────────────────────────────
+
+// public: register / login / google / me
+app.use('/api/auth', authRoutes);
+
+// ─── Protect all other /api routes with JWT auth ───────────────────────────
+app.use('/api', authMiddleware);
+
+app.use(helmet());
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
 // ─── Recording upload endpoint ────────────────────────────────────────────
 // Temporarily store uploads, then move into a per-session folder
@@ -315,20 +344,33 @@ const io = new SocketIO(server, {
   }
 });
 
+// ── Socket Authentication ───────────────────────────────────────────────
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) return next(new Error('Unauthorized'));
+  try {
+    const { id } = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = id;
+    next();
+  } catch (e) {
+    next(new Error('Unauthorized'));
+  }
+});
+
 // In-memory signaling state
 // Organize offers by room
 const rooms = {};
 const connectedSockets = [];
 
 // Socket.io logic
-io.on('connection', socket => {
-  const userName = socket.handshake.auth.userName;
-  const password = socket.handshake.auth.password;
+io.on('connection', async socket => {
+  // fetch authenticated user
+  const user = await User.findById(socket.userId).select('username');
+  if (!user) return socket.disconnect(true);
+  const userName = user.username;
+  
+  // roomId can still come from client
   const roomId = socket.handshake.auth.roomId || 'default';
-
-  if (password !== 'x') {
-    return socket.disconnect(true);
-  }
   
   // Initialize room if it doesn't exist
   if (!rooms[roomId]) {
@@ -487,8 +529,7 @@ io.on('connection', socket => {
   });
 
   socket.on('sendMessage', message => {
-    const { roomId, userName } = socket.handshake.auth;
-    // broadcast to everyone in room (including sender if you like)
+    // broadcast using fetched userName
     socket.to(roomId).emit('receiveMessage', { userName, message });
   });
 
