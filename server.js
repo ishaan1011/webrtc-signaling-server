@@ -1,5 +1,6 @@
 // server.js
 import 'dotenv/config';
+console.log('🔑 GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID);
 
 import path    from 'path';
 import { fileURLToPath } from 'url';
