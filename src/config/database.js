@@ -8,8 +8,5 @@ export function connectDB() {
     process.exit(1);
   }
 
-  return mongoose.connect(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  return mongoose.connect(uri);
 }
